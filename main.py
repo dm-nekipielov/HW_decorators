@@ -1,7 +1,6 @@
 import functools
-import os
+import tracemalloc
 
-import psutil
 import requests
 
 
@@ -9,11 +8,11 @@ def memory_profile(msg: str = "Memory used by "):
     def internal(f):
         @functools.wraps(f)
         def deco(*args, **kwargs):
+            tracemalloc.start()
             result = f(*args, **kwargs)
-            process_id = os.getpid()
-            process = psutil.Process(process_id)
+            small_memory, peak_memory = tracemalloc.get_traced_memory()
 
-            print(msg, f'{f.__name__}: {process.memory_info().vms / 1024 ** 2} MiB')
+            print(msg, f'{f.__name__}({args[0]}): {(peak_memory - small_memory) / 1024 ** 2} MiB')
             return result
 
         return deco
@@ -34,8 +33,9 @@ def cache(max_limit: int = 64):
             # видаляємо якшо досягли ліміта
             if len(deco._cache) >= max_limit:
                 # видаляємо елемент з найменшою кількістю запитів
-                deco._cache.pop(min(deco._call_count))
-                deco._call_count.pop(min(deco._call_count))
+                min_reqs = min(deco._call_count, key=deco._call_count.get)
+                deco._cache.pop(min_reqs)
+                deco._call_count.pop(min_reqs)
             deco._cache[cache_key] = result
             deco._call_count[cache_key] = 1
             return result
